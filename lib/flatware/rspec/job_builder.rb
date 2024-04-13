@@ -28,10 +28,6 @@ module Flatware
       end
 
       def jobs
-        timed_files, untimed_files = timed_and_untimed_files(
-          sum_seconds(load_persisted_example_statuses)
-        )
-
         balance_jobs(
           bucket_count: [files_to_run.size, workers].min,
           timed_files: timed_files,
@@ -39,65 +35,61 @@ module Flatware
         )
       end
 
+      def seconds_per_file
+        @seconds_per_file ||= if ENV["TEST_RUNTIME"]
+                                File
+                                  .read(ENV["TEST_RUNTIME"])
+                                  .split("\n")
+                                  .to_h do |line|
+                                    file_path, time = line.split(":")
+
+                                    ["./#{file_path}", time.to_f]
+                                  end
+                              else
+                                {}
+                              end
+      end
+
+      def timed_files
+        timed_and_untimed_files.first
+      end
+
+      def untimed_files
+        timed_and_untimed_files.last
+      end
+
+      def timed_and_untimed_files
+        @timed_and_untimed_files ||=
+          files_to_run
+            .map(&method(:normalize_path))
+            .reduce([[], []]) do |(timed, untimed), file|
+            if (time = seconds_per_file[file])
+              [timed + [[file, time]], untimed]
+            else
+              [timed, untimed + [file]]
+            end
+          end
+      end
+
       private
 
       def balance_jobs(bucket_count:, timed_files:, untimed_files:)
         balance_by(bucket_count, timed_files, &:last)
-          .map { |bucket| bucket.map(&:first) }
+          .map { |bucket| bucket.map { |(file, time)| FileWithStat.new(file, time) } }
           .zip(
             round_robin(bucket_count, untimed_files)
           ).map(&:flatten)
           .map { |files| Job.new(files, args) }
       end
 
-      def timed_and_untimed_files(seconds_per_file)
-        files_to_run
-          .map(&method(:normalize_path))
-          .reduce([[], []]) do |(timed, untimed), file|
-          if (time = seconds_per_file[file])
-            [timed + [[file, time]], untimed]
-          else
-            [timed, untimed + [file]]
-          end
-        end
-      end
-
       def normalize_path(path)
         ::RSpec::Core::Metadata.relative_path(File.expand_path(path))
-      end
-
-      def load_persisted_example_statuses
-        ::RSpec::Core::ExampleStatusPersister.load_from(
-          example_status_persistence_file_path || ''
-        )
-      end
-
-      def sum_seconds(statuses)
-        statuses.select(&passing)
-                .map { |example| parse_example(**example) }
-                .reduce({}) do |times, example|
-          times.merge(
-            example.fetch(:file_name) => example.fetch(:seconds)
-          ) do |_, old = 0, new|
-            old + new
-          end
-        end
-      end
-
-      def passing
-        ->(example) { example.fetch(:status) =~ /pass/i }
-      end
-
-      def parse_example(example_id:, run_time:, **)
-        seconds = run_time.match(/\d+(\.\d+)?/).to_s.to_f
-        file_name = ::RSpec::Core::Example.parse_id(example_id).first
-        { seconds: seconds, file_name: file_name }
       end
 
       def round_robin(count, items)
         Array.new(count) { [] }.tap do |groups|
           items.each_with_index do |entry, i|
-            groups[i % count] << entry
+            groups[i % count] << FileWithStat.new(entry, 0)
           end
         end
       end
@@ -113,6 +105,15 @@ module Flatware
               group.map(&block).reduce(:+) || 0
             end.push(entry)
           end
+        end
+      end
+
+      class FileWithStat
+        attr_reader :path, :time
+
+        def initialize (path, time)
+          @path = path
+          @time = time
         end
       end
     end
