@@ -18,13 +18,14 @@ module Flatware
       job_builder = RSpec::JobBuilder.new(rspec_args, workers: workers)
 
       if !job_builder.seconds_per_file.empty?
-        puts "Using #{job_builder.example_status_persistence_file_path} as recorded test runtime."
+        puts "Using #{ENV["TEST_RUNTIME"]} as recorded test runtime."
       else
         puts "No recorded test runtime found in #{job_builder.example_status_persistence_file_path}."
       end
 
       puts "#{workers} processes for #{job_builder.timed_files.size + job_builder.untimed_files.size} specs " \
            "(#{job_builder.timed_files.size} timed, #{job_builder.untimed_files.size} untimed)"
+      puts "Untimed specs:\n    #{job_builder.untimed_files.first(10).join("\n    ")}\n\n" unless job_builder.untimed_files.empty?
 
       jobs = job_builder.jobs
 
