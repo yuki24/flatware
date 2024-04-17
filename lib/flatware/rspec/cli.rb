@@ -39,9 +39,12 @@ module Flatware
         deprecation_stream: ::RSpec.configuration.deprecation_stream
       )
 
+      ordered_examples = job_builder.seconds_per_file.tap { _1.delete(nil) }.transform_keys { File.expand_path(_1) }
+      examples = ::RSpec.configuration.files_to_run.sort { |a, b| ordered_examples[a].to_f <=> ordered_examples[b].to_f }
+
       Flatware.verbose = options[:log]
       Worker.spawn count: workers, runner: RSpec, sink: options['sink-endpoint']
-      start_sink(jobs: jobs, workers: workers, formatter: formatter)
+      start_sink(jobs: jobs, workers: workers, formatter: formatter, examples: examples)
     end
   end
 end

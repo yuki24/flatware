@@ -18,16 +18,17 @@ module Flatware
     end
 
     class Server
-      attr_reader :checkpoints, :completed_jobs, :formatter, :jobs, :queue, :sink, :workers
+      attr_reader :checkpoints, :completed_jobs, :formatter, :jobs, :queue, :sink, :workers, :examples
 
-      def initialize(jobs:, formatter:, sink:, worker_count: 0, **)
+      def initialize(jobs:, formatter:, sink:, worker_count: 0, examples:, **)
         @checkpoints = []
         @completed_jobs = []
         @formatter = formatter
-        @jobs = group_jobs(jobs, worker_count).freeze
+        @jobs = jobs.freeze
         @queue = @jobs.dup
         @sink = sink
         @workers = Set.new(worker_count.times.to_a)
+        @examples = examples
       end
 
       def start
@@ -68,6 +69,10 @@ module Flatware
 
       def respond_to_missing?(name, include_all)
         formatter.respond_to?(name, include_all)
+      end
+
+      def pop
+        examples.pop
       end
 
       private

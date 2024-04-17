@@ -53,7 +53,7 @@ module Flatware
 
     private
 
-    def start_sink(jobs:, workers:, formatter:)
+    def start_sink(jobs:, workers:, formatter:, examples:)
       $0 = 'flatware sink'
       try_setpgrp
 
@@ -61,7 +61,8 @@ module Flatware
         jobs: jobs,
         formatter: Flatware::Broadcaster.new([formatter]),
         sink: options['sink-endpoint'],
-        worker_count: workers
+        worker_count: workers,
+        examples: examples
       )
       exit passed ? 0 : 1
     end

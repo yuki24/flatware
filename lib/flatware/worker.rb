@@ -42,7 +42,12 @@ module Flatware
     private
 
     def run(job)
-      runner.run job.id, job.args
+      runner.setup_suite(job) do |reporter|
+        while (spec_file = sink.pop) do
+          runner.run_single_spec(spec_file, reporter)
+        end
+      end
+
       sink.finished job
     rescue Interrupt
       want_to_quit!
